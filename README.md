@@ -4,16 +4,16 @@ This repository implements a self-contained gap buffer data structure that's eas
 (support for unicode (utf8))
 
 # Table of contents
-1. License
-1. Context
-1. Usage
-  1. Install
-  1. Instanciate
-  1. Text insertion
-  1. Cursor position
-  1. Text deletion
-  1. Querying
-1. Testing
+* [License](#license)
+* [Context](#context)
+* [Usage](#usage)
+    * [Install](#install)
+    * [Instanciate](#instanciate)
+    * [Text insertion](#text-insertion)
+    * [Cursor position](#cursor-position)
+    * [Text deletion](#text-deletion)
+    * [Querying](#querying)
+* [Testing](#testing)
 
 ## License
 This code is MIT licensed
@@ -84,3 +84,5 @@ To get the byte count using the getter function
 size_t GapBuffer_getByteCount(GapBuffer *buff);
 ```
 This is currently only used for testing.
+
+## Testing
