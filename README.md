@@ -1,4 +1,4 @@
-# GapBuffer
+# gap_buffer.c
 This repository is a self-contained gap buffer implementation in C which supports unicode (utf-8). The aim of the implementation is to be simple, robust and easy to use.
 
 # Table of contents
@@ -14,7 +14,6 @@ This repository is a self-contained gap buffer implementation in C which support
     * [Text insertion](#text-insertion)
     * [Cursor position](#cursor-position)
     * [Text deletion](#text-deletion)
-    * [Querying](#querying)
 * [Testing](#testing)
 
 ## What is a gap buffer?
@@ -111,7 +110,7 @@ This code is MIT licensed
 > THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ## Usage
-An overview of how to use this code follows. You can find more information in the documentation that comes with the code.
+An overview of how to use this code follows, though you can find more information in the documentation that comes with the code.
 
 ### Install
 To use it, first you need to drop `gap_buffer.c` and `gap_buffer.h` in your project directory and link them during compilation
@@ -158,12 +157,5 @@ void GapBuffer_removeForwards(GapBuffer *buff, size_t num);
 void GapBuffer_removeBackwards(GapBuffer *buff, size_t num);
 ```
 Where `num` is the number of unicode characters to be removed. If less than `num` characters are available, then they are all removed.
-
-### Querying
-To get the byte count using the getter function
-```c
-size_t GapBuffer_getByteCount(GapBuffer *buff);
-```
-This is currently only used for testing.
 
 ## Testing

@@ -184,6 +184,8 @@ static bool ensureSpace(GapBuffer **buff, size_t min)
         if (new_buff == NULL)
             return false;
 
+        // Free up the old buffer and swap the old 
+        // parent's reference with the new one.
         GapBuffer_destroy(*buff);
         *buff = new_buff;
     }
@@ -224,11 +226,60 @@ static GapBuffer *growGap(GapBuffer *buff, size_t min)
     return new_buff;
 }
 
+// Returns true if and only if the [byte] is in the form 10xxxxxx
 static bool isSymbolAuxiliaryByte(uint8_t byte)
 {
+    /*
+    0000  0
+    0001  1
+    0010  2
+    0011  3
+    0100  4
+    0101  5
+    0110  6
+    0111  7
+    1000  8
+    1001  9
+    1010  A  10
+    1011  B  11
+    1100  C  12
+    1101  D  13
+    1110  E  14
+    1111  F  15
+    */
+
+    //   Hex    Binary
+    // +-----+----------+
+    // | C0  | 11000000 |
+    // +-----+----------+
+    // | 80  | 10000000 |
+    // +-----+----------+
+
     return (byte & 0xC0) == 0x80;
 }
 
+/* Symbol: getSymbolRune
+**   Converts a UTF-8 symbol to UTF-32.
+**
+** Arguments:
+**   - sym: string of bytes containing the UTF-8 symbol.
+**
+**   - symlen: Length (in bytes) of the string [sym].
+** I
+**   - rune: The location where the UTF-32 result will
+**           be stored. This argument isn't optional
+**           (you can pass NULL).
+**
+** Returns:
+**   The number of bytes of [sym] considered to
+**   decode the unicode symbol, 0 if the source
+**   string was empty or -1 if the source contained 
+**   invalid UTF-8.
+**
+** Notes:
+**   - The (sym, symlen) pair can refer to a string of
+**     more than one unicode symbol.
+*/
 #warning "temporarily not static"
 int getSymbolRune(const char *sym, size_t symlen, uint32_t *rune)
 {
@@ -321,6 +372,33 @@ int getSymbolRune(const char *sym, size_t symlen, uint32_t *rune)
     return 1;
 }
 
+/* Symbol: GapBuffer_insertString
+**   Insert a UTF-8 encoded string in the gap buffer,
+**   right before the cursor. If there's not enough
+**   space to store the string and the gap buffer
+**   was't instanciated with [GapBuffer_createUsingMemory],
+**   relocation to a bigger memory region occurres.
+**
+** Arguments:
+**   - buff: Reference to the caller's reference to the
+**           buffer. The caller's handle is changed if
+**           relocation occurres.
+**
+**   - str: Pointer to the UTF-8 string to be inserted.
+** I
+**   - len: Length (in bytes) of the input string.
+**
+** Returns:
+**   True if the text was inserted and false if either:
+**
+**     - The buffer couldn't be relocated because
+**       instanciated with a fixed memory pool.
+**
+**     - The buffer couldn't be relocated because
+**       a new memory region couldn't be allocated.
+**
+**     - The input string wasn't valid UTF-8.
+*/
 bool GapBuffer_insertString(GapBuffer **buff, const char *str, size_t len)
 {
     size_t i = 0;
