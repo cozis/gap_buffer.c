@@ -27,8 +27,11 @@ struct GapBuffer {
 ** Notes:
 **   - This information isn't very useful to the owner
 **     of the gap instance. It's only really used while
-**     testing. It may be good to make it private to the
-**     testing routine somehow.
+**     testing.
+**
+**   - This isn't declared in the header file, so
+**     if a program wants to use this function it need
+**     to specify its prototype explicitly.
 */
 size_t GapBuffer_getByteCount(GapBuffer *buff)
 {
