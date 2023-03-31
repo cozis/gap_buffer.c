@@ -1,11 +1,9 @@
 # GapBuffer
-This repository implements a self-contained gap buffer data structure that's easily embeddable in your own C project!
-
-(support for unicode (utf8))
+This repository is a self-contained gap buffer implementation in C which supports unicode (utf-8). The aim of the implementation is to be simple, robust and easy to use.
 
 # Table of contents
 * [License](#license)
-* [Context](#context)
+* [What is a gap buffer?](#what-is-a-gap-buffer)
 * [Usage](#usage)
     * [Install](#install)
     * [Instanciate](#instanciate)
@@ -26,7 +24,7 @@ This code is MIT licensed
 > 
 > THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-## Context
+## What is a gap buffer?
 A gap buffer is a data structure that stores strings of text in a way that's optimized for operations you do in a text editor.
 
 ## Usage
