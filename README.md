@@ -18,7 +18,7 @@ This repository is a self-contained gap buffer implementation in C which support
 * [Testing](#testing)
 
 ## What is a gap buffer?
-A gap buffer is a data structure that stores strings of text in a way that's optimized for operation based on a cursor, which makes it useful for text editors. The way it works is by dividing the memory is three regions: the text preceding the cursor, the unused memory and then the text following the cursor. The unused memory region is often referred to as "gap", hence the name "gap buffer".
+A gap buffer is a data structure that stores strings of text in a way that's optimized for operations based on a cursor, which makes it useful for text editors. The way it works is by dividing the memory is three regions: the text preceding the cursor, the unused memory and then the text following the cursor. The unused memory region is often referred to as "gap", hence the name "gap buffer".
 
 ### Insertion
 Imagine storing the string "Hello, world!" in a buffer with a capacity of 20 bytes and placing the cursor just before the "w" of "world". What the gap buffer would look like is this:
@@ -33,8 +33,6 @@ Hello, |world!
 (the "_" represents a space)
 ```
 In the diagram the cursor position was emphasized, but it's just a way to refer to the first unused byte, so it's actually redundant to specify it. 
-
-The region in the middle is usually referred as "gap" (hence the gap buffer).
 
 When text is inserted in the buffer, it's placed before the cursor and the free space is decreased. Imagine inserting the string "my " in the previous example:
 

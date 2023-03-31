@@ -20,14 +20,42 @@ struct GapBuffer {
     uint8_t data[];
 };
 
+/* Symbol: GapBuffer_getByteCount
+**   Return the length in bytes of the string stored
+**   in the buffer.
+**
+** Notes:
+**   - This information isn't very useful to the owner
+**     of the gap instance. It's only really used while
+**     testing. It may be good to make it private to the
+**     testing routine somehow.
+*/
 size_t GapBuffer_getByteCount(GapBuffer *buff)
 {
     return buff->total - buff->gap_length;
 }
 
+/* Symbol: GapBuffer_createUsingMemory
+**   Instanciate a gap buffer by providing it the memory
+**   it should use. The gap buffer won't be able to relocate
+**   to a bigger memory region if needed.
+**
+** Arguments:
+**   - mem: Address of the memory region used by the buffer
+**   - len: Length in bytes of the region referred to by [mem]
+**
+** Returns:
+**   The pointer to a buffer instance or NULL if the
+**   provided memory wasn't enough.
+**
+** Notes:
+**   - If you only instanciate buffers this way, you basically
+**     can drop the dependency on the libc allocator and potentially
+**     libc entirely.
+*/
 GapBuffer *GapBuffer_createUsingMemory(void *mem, size_t len)
 {
-    if (len < sizeof(GapBuffer))
+    if (mem == NULL || len < sizeof(GapBuffer))
         return NULL;
     
     size_t capacity = len - sizeof(GapBuffer);
@@ -41,6 +69,22 @@ GapBuffer *GapBuffer_createUsingMemory(void *mem, size_t len)
     return buff;
 }
 
+/* Symbol: GapBuffer_create
+**   Instanciate a gap buffer by allocating memory through
+**   the libc allocator.
+**   
+**   Gap buffers instanciated this way will allocate and
+**   relocate to bigger memory regions if necessary.
+**
+** Arguments:
+**   - capacity: The maximum string length (in bytes) that
+**               will be possible to store in the buffer
+**               without the need of allocating more memory.
+**
+** Returns:
+**   The pointer to a buffer instance or NULL if the
+**   dynamic memory allocation failed.
+*/
 GapBuffer *GapBuffer_create(size_t capacity)
 {
     GapBuffer *buff = malloc(sizeof(GapBuffer) + capacity);
@@ -54,30 +98,81 @@ GapBuffer *GapBuffer_create(size_t capacity)
     return buff;
 }
 
+/* Symbol: GapBuffer_destroy
+**   Delete an instanciated gap buffer. 
+*/
 void GapBuffer_destroy(GapBuffer *buff)
 {
     if (!buff->is_static)
         free(buff);
 }
 
+/* Symbol: getStringBeforeGap
+**   Returns a slice to the memory region before the gap
+**   in the form of a (pointer, length) pair.
+*/
 static String getStringBeforeGap(GapBuffer *buff)
 {
     return (String) {
-        .data=buff->data, 
-        .size=buff->gap_offset,
+
+        .data=buff->data, // The start of the buffer is also the
+                          // start of the region before the gap.
+
+        .size=buff->gap_offset, // The offset of the gap is the the length
+                                // of the region that comes before it.
     };
 }
 
+/* Symbol: getStringAfterGap
+**   Returns a slice to the memory region after the gap
+**   in the form of a (pointer, length) pair.
+*/
 static String getStringAfterGap(GapBuffer *buff)
 {
+    // The first byte after the gap is the offset
+    // of the text that comes after the gap and
+    // the length of the region before the gap plus
+    // the length of the gap.
     size_t first_byte_after_gap = buff->gap_offset + buff->gap_length;
+
     return (String) {
-        .data = buff->data  + first_byte_after_gap, 
-        .size = buff->total - first_byte_after_gap,
+        .data = buff->data  + first_byte_after_gap,
+        .size = buff->total - first_byte_after_gap, // The length of the region following the
+                                                    // gap is the total number of bytes minus
+                                                    // the offset of the first byte after the gap.
     };
 }
 
+/* Forward declaration of [growGap] because [growGap]
+** and [ensureSpace] refer to each other recursively,
+** even though isn't not possible to have recursive
+** calls during execution.
+*/
 static GapBuffer *growGap(GapBuffer *buff, size_t min);
+
+/* Symbol: ensureSpace
+**   Make sure that the buffer has at least [min]
+**   unused bytes by relocating the buffer to a
+**   bigger memory region if necessary.
+**
+** Arguments:
+**   - buff: Reference to the buffer's reference. If a relocation
+**           occurres, the caller's reference will be changed.
+** I
+**   - min: Minimum number of free bytes the call must ensure.
+**          If the buffer has a gap smaller than [min], relocation
+**          will occur.
+**
+** Returns:
+**   True if the buffer has more than [min] free 
+**   space or if relocation occurred succesfully.
+**   If relocation failed or the buffer isn't allowed
+**   to grow, false is returned.
+**
+** Notes:
+**   - Only gaps instanciated with [GapBuffer_create]
+**     are allowed to be relocated.
+*/
 static bool ensureSpace(GapBuffer **buff, size_t min)
 {
     if ((*buff)->gap_length < min) {
