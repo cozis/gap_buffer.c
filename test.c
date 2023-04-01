@@ -6,6 +6,9 @@
 #include <assert.h>
 #include "gap_buffer.h"
 
+size_t getByteCount(GapBuffer *buff);
+int getSymbolRune(const char *sym, size_t symlen, uint32_t *rune);
+
 #define MIN(X, Y) ((X) < (Y) ? (X) : (Y))
 
 static size_t generateUnsignedIntegerBetween(size_t min, size_t max)
@@ -63,7 +66,7 @@ static size_t generateUTF8String(char *dst, size_t max)
         uint32_t rune2;
         int k = getSymbolRune((char*) temp, num, &rune2);
         assert(k >= 0);
-        assert(k == num);
+        assert((size_t) k == num);
         assert(rune == rune2);
 
         memcpy(dst + len, temp, num);
@@ -72,7 +75,8 @@ static size_t generateUTF8String(char *dst, size_t max)
     return len;
 }
 
-void printStringAsHex(char *str, size_t len, FILE *stream)
+/*
+static void printStringAsHex(char *str, size_t len, FILE *stream)
 {
     fprintf(stream, "[ ");
     for (size_t i = 0; i < len; i++) {
@@ -81,6 +85,7 @@ void printStringAsHex(char *str, size_t len, FILE *stream)
     }
     fprintf(stream, "]");
 }
+*/
 
 int main(void)
 {
@@ -94,7 +99,7 @@ int main(void)
             case 0:
             {
                 size_t len = generateString(buffer, sizeof(buffer));
-                bool done = GapBuffer_insertString(&gap_buffer, buffer, len); 
+                bool done = GapBuffer_insertStringMaybeRelocate(&gap_buffer, buffer, len); 
                 fprintf(stderr, "INSERT %ld \"%.*s\" .. %s\n", len, (int) len, buffer, done ? "DONE" : "NOT DONE");
                 //printStringAsHex(buffer, len, stderr);
                 //fprintf(stderr, "\n");
@@ -104,7 +109,7 @@ int main(void)
             case 1:
             {
                 size_t len = generateUTF8String(buffer, sizeof(buffer));
-                bool done = GapBuffer_insertString(&gap_buffer, buffer, len); 
+                bool done = GapBuffer_insertStringMaybeRelocate(&gap_buffer, buffer, len); 
                 fprintf(stderr, "INSERT %ld \"%.*s\" .. %s\n", len, (int) len, buffer, done ? "DONE" : "NOT DONE");
                 //printStringAsHex(buffer, len, stderr);
                 //fprintf(stderr, "\n");
@@ -113,7 +118,7 @@ int main(void)
 
             case 2:
             {
-                size_t limit = 1.5 * GapBuffer_getSize(gap_buffer);
+                size_t limit = 1.5 * getByteCount(gap_buffer);
                 size_t index = generateUnsignedIntegerBetween(0, limit);
                 fprintf(stderr, "MOVE_ABSOLUTE %ld\n", index);
                 GapBuffer_moveAbsolute(gap_buffer, index);
@@ -122,7 +127,7 @@ int main(void)
 
             case 3:
             {
-                size_t limit = 1.5 * GapBuffer_getSize(gap_buffer);
+                size_t limit = 1.5 * getByteCount(gap_buffer);
                 size_t index = generateUnsignedIntegerBetween(0, limit);
                 fprintf(stderr, "MOVE_RELATIVE %ld\n", index);
                 GapBuffer_moveRelative(gap_buffer, index);
@@ -132,7 +137,7 @@ int main(void)
 
             case 4:
             {
-                size_t limit = 1.5 * GapBuffer_getSize(gap_buffer);
+                size_t limit = 1.5 * getByteCount(gap_buffer);
                 size_t length = generateUnsignedIntegerBetween(0, limit);
                 fprintf(stderr, "REMOVE_FORWARDS %ld\n", length);
                 GapBuffer_removeForwards(gap_buffer, length);
@@ -141,7 +146,7 @@ int main(void)
 
             case 5:
             {
-                size_t limit = 1.5 * GapBuffer_getSize(gap_buffer);
+                size_t limit = 1.5 * getByteCount(gap_buffer);
                 size_t length = generateUnsignedIntegerBetween(0, limit);
                 fprintf(stderr, "REMOVE_BACKWARDS %ld\n", length);
                 GapBuffer_removeBackwards(gap_buffer, length);

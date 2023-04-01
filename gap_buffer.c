@@ -1,65 +1,40 @@
 #include <stdint.h>
-#include <stdlib.h>
 #include <assert.h>
 #include <string.h>
 #include "gap_buffer.h"
 
+#ifdef GAPBUFFER_DEBUG
+#define PRIVATE
+#else
+#define PRIVATE static
+#endif
+
 #define MAX(X, Y) ((X) > (Y) ? (X) : (Y))
 
 typedef struct {
-    const uint8_t *data;
-    size_t size;
+    const char *data;
+    size_t      size;
 } String;
 
 struct GapBuffer {
-    bool is_static;
-    bool no_resize;
+    void (*free)(void*);
     size_t gap_offset;
     size_t gap_length;
     size_t total;
-    uint8_t data[];
+    char   data[];
 };
 
-/* Symbol: GapBuffer_getByteCount
-**   Return the length in bytes of the string stored
-**   in the buffer.
-**
-** Notes:
-**   - This information isn't very useful to the owner
-**     of the gap instance. It's only really used while
-**     testing.
-**
-**   - This isn't declared in the header file, so
-**     if a program wants to use this function it need
-**     to specify its prototype explicitly.
-*/
-size_t GapBuffer_getByteCount(GapBuffer *buff)
+PRIVATE size_t getByteCount(GapBuffer *buff)
 {
     return buff->total - buff->gap_length;
 }
 
-/* Symbol: GapBuffer_createUsingMemory
-**   Instanciate a gap buffer by providing it the memory
-**   it should use. The gap buffer won't be able to relocate
-**   to a bigger memory region if needed.
-**
-** Arguments:
-**   - mem: Address of the memory region used by the buffer
-**   - len: Length in bytes of the region referred to by [mem]
-**
-** Returns:
-**   The pointer to a buffer instance or NULL if the
-**   provided memory wasn't enough.
-**
-** Notes:
-**   - If you only instanciate buffers this way, you basically
-**     can drop the dependency on the libc allocator and potentially
-**     libc entirely.
-*/
-GapBuffer *GapBuffer_createUsingMemory(void *mem, size_t len)
+GapBuffer *GapBuffer_createUsingMemory(void *mem, size_t len, void (*free)(void*))
 {
-    if (mem == NULL || len < sizeof(GapBuffer))
+    if (mem == NULL || len < sizeof(GapBuffer)) {
+        if (free) free(mem);
         return NULL;
+    }
     
     size_t capacity = len - sizeof(GapBuffer);
 
@@ -67,37 +42,7 @@ GapBuffer *GapBuffer_createUsingMemory(void *mem, size_t len)
     buff->gap_offset = 0;
     buff->gap_length = capacity;
     buff->total = capacity;
-    buff->no_resize = true;
-    buff->is_static = true;
-    return buff;
-}
-
-/* Symbol: GapBuffer_create
-**   Instanciate a gap buffer by allocating memory through
-**   the libc allocator.
-**   
-**   Gap buffers instanciated this way will allocate and
-**   relocate to bigger memory regions if necessary.
-**
-** Arguments:
-**   - capacity: The maximum string length (in bytes) that
-**               will be possible to store in the buffer
-**               without the need of allocating more memory.
-**
-** Returns:
-**   The pointer to a buffer instance or NULL if the
-**   dynamic memory allocation failed.
-*/
-GapBuffer *GapBuffer_create(size_t capacity)
-{
-    GapBuffer *buff = malloc(sizeof(GapBuffer) + capacity);
-    if (buff == NULL)
-        return NULL;
-    buff->gap_offset = 0;
-    buff->gap_length = capacity;
-    buff->total = capacity;
-    buff->no_resize = false;
-    buff->is_static = false;
+    buff->free = free;
     return buff;
 }
 
@@ -106,15 +51,15 @@ GapBuffer *GapBuffer_create(size_t capacity)
 */
 void GapBuffer_destroy(GapBuffer *buff)
 {
-    if (!buff->is_static)
-        free(buff);
+    if (buff->free)
+        buff->free(buff);
 }
 
 /* Symbol: getStringBeforeGap
 **   Returns a slice to the memory region before the gap
 **   in the form of a (pointer, length) pair.
 */
-static String getStringBeforeGap(GapBuffer *buff)
+PRIVATE String getStringBeforeGap(const GapBuffer *buff)
 {
     return (String) {
 
@@ -130,7 +75,7 @@ static String getStringBeforeGap(GapBuffer *buff)
 **   Returns a slice to the memory region after the gap
 **   in the form of a (pointer, length) pair.
 */
-static String getStringAfterGap(GapBuffer *buff)
+PRIVATE String getStringAfterGap(const GapBuffer *buff)
 {
     // The first byte after the gap is the offset
     // of the text that comes after the gap and
@@ -146,111 +91,53 @@ static String getStringAfterGap(GapBuffer *buff)
     };
 }
 
-/* Forward declaration of [growGap] because [growGap]
-** and [ensureSpace] refer to each other recursively,
-** even though isn't not possible to have recursive
-** calls during execution.
-*/
-static GapBuffer *growGap(GapBuffer *buff, size_t min);
-
-/* Symbol: ensureSpace
-**   Make sure that the buffer has at least [min]
-**   unused bytes by relocating the buffer to a
-**   bigger memory region if necessary.
-**
-** Arguments:
-**   - buff: Reference to the buffer's reference. If a relocation
-**           occurres, the caller's reference will be changed.
-** I
-**   - min: Minimum number of free bytes the call must ensure.
-**          If the buffer has a gap smaller than [min], relocation
-**          will occur.
-**
-** Returns:
-**   True if the buffer has more than [min] free 
-**   space or if relocation occurred succesfully.
-**   If relocation failed or the buffer isn't allowed
-**   to grow, false is returned.
-**
-** Notes:
-**   - Only gaps instanciated with [GapBuffer_create]
-**     are allowed to be relocated.
-*/
-static bool ensureSpace(GapBuffer **buff, size_t min)
+PRIVATE bool insertBytesBeforeCursor(GapBuffer *buff, String str)
 {
-    if ((*buff)->gap_length < min) {
-
-        if ((*buff)->no_resize)
-            return false;
-
-        GapBuffer *new_buff = growGap(*buff, min);
-        if (new_buff == NULL)
-            return false;
-
-        // Free up the old buffer and swap the old 
-        // parent's reference with the new one.
-        GapBuffer_destroy(*buff);
-        *buff = new_buff;
-    }
-    return true;
-}
-
-static bool insertBytesBeforeCursor(GapBuffer **buff, String str)
-{
-    if (!ensureSpace(buff, str.size))
+    if (buff->gap_length < str.size)
         return false;
-    memcpy((*buff)->data + (*buff)->gap_offset, str.data, str.size);
-    (*buff)->gap_offset += str.size;
-    (*buff)->gap_length -= str.size;
+    
+    memcpy(buff->data + buff->gap_offset, str.data, str.size);
+    buff->gap_offset += str.size;
+    buff->gap_length -= str.size;
     return true;
 }
 
-static bool insertBytesAfterCursor(GapBuffer **buff, String str)
+PRIVATE bool insertBytesAfterCursor(GapBuffer *buff, String str)
 {
-    if (!ensureSpace(buff, str.size))
+    if (buff->gap_length < str.size)
         return false;
-    memcpy((*buff)->data + (*buff)->gap_offset + (*buff)->gap_length - str.size, str.data, str.size);
-    (*buff)->gap_length -= str.size;
+
+    memcpy(buff->data + buff->gap_offset + buff->gap_length - str.size, str.data, str.size);
+    buff->gap_length -= str.size;
     return true;
 }
 
-static GapBuffer *growGap(GapBuffer *buff, size_t min)
+GapBuffer *GapBuffer_cloneUsingMemory(void *mem, size_t len, 
+                                      void (*free)(void*),
+                                      const GapBuffer *src)
 {
-    size_t capacity = MAX(2 * buff->total, buff->total + min);
-    GapBuffer *new_buff = GapBuffer_create(capacity);
-    if (new_buff == NULL)
+    GapBuffer *clone = GapBuffer_createUsingMemory(mem, len, free);
+    if (!clone)
         return NULL;
 
-    if(!insertBytesBeforeCursor(&new_buff, getStringBeforeGap(buff)) || 
-       !insertBytesAfterCursor(&new_buff, getStringAfterGap(buff))) {
-        GapBuffer_destroy(new_buff);
-        return NULL;
-    }
-    return new_buff;
+    String before = getStringBeforeGap(src);
+    if (!insertBytesBeforeCursor(clone, before))
+        goto oopsie;
+
+    String after = getStringAfterGap(src);
+    if (!insertBytesAfterCursor(clone, after))
+        goto oopsie;
+        
+    return clone;
+
+oopsie:
+    GapBuffer_destroy(clone);
+    return NULL;
 }
 
 // Returns true if and only if the [byte] is in the form 10xxxxxx
-static bool isSymbolAuxiliaryByte(uint8_t byte)
+PRIVATE bool isSymbolAuxiliaryByte(uint8_t byte)
 {
-    /*
-    0000  0
-    0001  1
-    0010  2
-    0011  3
-    0100  4
-    0101  5
-    0110  6
-    0111  7
-    1000  8
-    1001  9
-    1010  A  10
-    1011  B  11
-    1100  C  12
-    1101  D  13
-    1110  E  14
-    1111  F  15
-    */
-
     //   Hex    Binary
     // +-----+----------+
     // | C0  | 11000000 |
@@ -261,30 +148,7 @@ static bool isSymbolAuxiliaryByte(uint8_t byte)
     return (byte & 0xC0) == 0x80;
 }
 
-/* Symbol: getSymbolRune
-**   Converts a UTF-8 symbol to UTF-32.
-**
-** Arguments:
-**   - sym: string of bytes containing the UTF-8 symbol.
-**
-**   - symlen: Length (in bytes) of the string [sym].
-** I
-**   - rune: The location where the UTF-32 result will
-**           be stored. This argument isn't optional
-**           (you can pass NULL).
-**
-** Returns:
-**   The number of bytes of [sym] considered to
-**   decode the unicode symbol, 0 if the source
-**   string was empty or -1 if the source contained 
-**   invalid UTF-8.
-**
-** Notes:
-**   - The (sym, symlen) pair can refer to a string of
-**     more than one unicode symbol.
-*/
-#warning "temporarily not static"
-int getSymbolRune(const char *sym, size_t symlen, uint32_t *rune)
+PRIVATE int getSymbolRune(const char *sym, size_t symlen, uint32_t *rune)
 {
     if(symlen == 0)
         return 0;
@@ -375,34 +239,7 @@ int getSymbolRune(const char *sym, size_t symlen, uint32_t *rune)
     return 1;
 }
 
-/* Symbol: GapBuffer_insertString
-**   Insert a UTF-8 encoded string in the gap buffer,
-**   right before the cursor. If there's not enough
-**   space to store the string and the gap buffer
-**   was't instanciated with [GapBuffer_createUsingMemory],
-**   relocation to a bigger memory region occurres.
-**
-** Arguments:
-**   - buff: Reference to the caller's reference to the
-**           buffer. The caller's handle is changed if
-**           relocation occurres.
-**
-**   - str: Pointer to the UTF-8 string to be inserted.
-** I
-**   - len: Length (in bytes) of the input string.
-**
-** Returns:
-**   True if the text was inserted and false if either:
-**
-**     - The buffer couldn't be relocated because
-**       instanciated with a fixed memory pool.
-**
-**     - The buffer couldn't be relocated because
-**       a new memory region couldn't be allocated.
-**
-**     - The input string wasn't valid UTF-8.
-*/
-bool GapBuffer_insertString(GapBuffer **buff, const char *str, size_t len)
+PRIVATE bool isValidUTF8(const char *str, size_t len)
 {
     size_t i = 0;
     while (i < len) {
@@ -412,10 +249,35 @@ bool GapBuffer_insertString(GapBuffer **buff, const char *str, size_t len)
             return false;
         i += n;
     }
-    return insertBytesBeforeCursor(buff, (String) {.data=(const uint8_t*) str, .size=len});
+    return true;
 }
 
-static size_t getPrecedingSymbol(GapBuffer *buff, size_t num)
+bool GapBuffer_insertString(GapBuffer *buff, const char *str, size_t len)
+{
+    if (!isValidUTF8(str, len))
+        return false;
+    return insertBytesBeforeCursor(buff, (String) {.data=str, .size=len});
+}
+
+/* Symbol: getPrecedingSymbol
+**
+**   Calculate the absolute byte offset of the 
+**   [num]-th unicode symbol preceding the cursor.
+**
+**   If less than [num] symbols precede the
+**   cursor, 0 is returned.
+**
+** Arguments:
+**   - buff: Reference to the gap buffer
+**
+**   - num: Position of the unicode symbol preceding
+**          the cursor of which the offset should be
+**          returned, relative to the cursor.
+**
+** Notes:
+**   - It's analogous to getFollowingSymbol.
+*/
+PRIVATE size_t getPrecedingSymbol(GapBuffer *buff, size_t num)
 {
     size_t i = buff->gap_offset;
 
@@ -441,7 +303,7 @@ static size_t getPrecedingSymbol(GapBuffer *buff, size_t num)
     return i;
 }
 
-static size_t getSymbolLengthFromFirstByte(uint8_t first)
+PRIVATE size_t getSymbolLengthFromFirstByte(uint8_t first)
 {
     // NOTE: It's assumed a valid first byte
     if (first >= 0xf0)
@@ -453,7 +315,25 @@ static size_t getSymbolLengthFromFirstByte(uint8_t first)
     return 1;
 }
 
-static size_t getFollowingSymbol(GapBuffer *buff, size_t num)
+/* Symbol: getFollowingSymbol
+**
+**   Calculate the absolute byte offset of the 
+**   [num]-th unicode symbol following the cursor.
+**
+**   If less than [num] symbols follow the cursor, 
+**   0 is returned.
+**
+** Arguments:
+**   - buff: Reference to the gap buffer
+**
+**   - num: Position of the unicode symbol following
+**          the cursor of which the offset should be
+**          returned, relative to the cursor.
+**
+** Notes:
+**   - It's analogous to getPrecedingSymbol.
+*/
+PRIVATE size_t getFollowingSymbol(GapBuffer *buff, size_t num)
 {
     size_t i = buff->gap_offset + buff->gap_length;
     while (num > 0 && i < buff->total) {
@@ -476,7 +356,7 @@ void GapBuffer_removeBackwards(GapBuffer *buff, size_t num)
     buff->gap_offset = i;
 }
 
-static void moveBytesAfterGap(GapBuffer *buff, size_t num)
+PRIVATE void moveBytesAfterGap(GapBuffer *buff, size_t num)
 {
     assert(buff->gap_offset >= num);
 
@@ -490,7 +370,7 @@ static void moveBytesAfterGap(GapBuffer *buff, size_t num)
     buff->gap_offset -= num;
 }
 
-static void moveBytesBeforeGap(GapBuffer *buff, size_t num)
+PRIVATE void moveBytesBeforeGap(GapBuffer *buff, size_t num)
 {
     assert(buff->total - buff->gap_offset - buff->gap_length >= num); // FIXME: This triggers sometimes
 
@@ -550,18 +430,12 @@ void GapBufferIter_init(GapBufferIter *iter, GapBuffer *buff)
 
 void GapBufferIter_free(GapBufferIter *iter)
 {
-    if (iter->mem != NULL) {
-        free(iter->mem);
-        iter->mem = NULL;
-    }
+    iter->mem = NULL;
 }
 
 bool GapBufferIter_next(GapBufferIter *iter, GapBufferLine *line)
 {
-    if (iter->mem != NULL) {
-        free(iter->mem);
-        iter->mem = NULL;
-    }
+    iter->mem = NULL;
 
     size_t i = iter->cur;
     size_t total = iter->buff->total;
@@ -611,24 +485,15 @@ bool GapBufferIter_next(GapBufferIter *iter, GapBufferLine *line)
             iter->crossed_gap = true;
 
             if (line_length + line_length_2 > sizeof(iter->maybe)) {
-                char *str = malloc(line_length + line_length_2);
-                if (str == NULL) {
-                    // Line will be truncated
-                    if (line_length > sizeof(iter->maybe))
-                        memcpy(iter->maybe, data + line_offset, sizeof(iter->maybe));
-                    else {
-                        memcpy(iter->maybe,               data + line_offset,   line_length);
-                        memcpy(iter->maybe + line_offset, data + line_offset_2, sizeof(iter->maybe) - line_length);
-                    }
-                    line->str = iter->maybe;
-                    line->len = line_length + line_length_2;
-                } else {
-                    iter->mem = str;
-                    memcpy(str,               data + line_offset,   line_length);
-                    memcpy(str + line_length, data + line_offset_2, line_length_2);
-                    line->str = str;
-                    line->len = line_length + line_length_2;
+                // Line will be truncated
+                if (line_length > sizeof(iter->maybe))
+                    memcpy(iter->maybe, data + line_offset, sizeof(iter->maybe));
+                else {
+                    memcpy(iter->maybe,               data + line_offset,   line_length);
+                    memcpy(iter->maybe + line_offset, data + line_offset_2, sizeof(iter->maybe) - line_length);
                 }
+                line->str = iter->maybe;
+                line->len = line_length + line_length_2;
             } else {
                 memcpy(iter->maybe,               data + line_offset,   line_length);
                 memcpy(iter->maybe + line_length, data + line_offset_2, line_length_2);
@@ -646,3 +511,35 @@ bool GapBufferIter_next(GapBufferIter *iter, GapBufferLine *line)
     iter->cur = i;
     return true;
 }
+
+#ifndef GAPBUFFER_NOMALLOC
+#include <stdlib.h>
+GapBuffer *GapBuffer_create(size_t capacity)
+{
+    size_t len = sizeof(GapBuffer) + capacity;
+    void  *mem = malloc(len);
+    return GapBuffer_createUsingMemory(mem, len, free);
+}
+bool GapBuffer_insertStringMaybeRelocate(GapBuffer **buff, const char *str, size_t len)
+{
+    if (!GapBuffer_insertString(*buff, str, len)) {
+        // Need to relocate
+        GapBuffer *buff2 = GapBuffer_create(getByteCount(*buff) + len);
+        if (buff2 == NULL)
+            return false; // Failed to create new location
+
+        if (!GapBuffer_insertString(buff2, str, len)) {
+            // Insertion failed unexpectedly. The gap was created
+            // with enough free memory to hold the new text..
+            GapBuffer_destroy(buff2);
+            return false;
+        }
+
+        // Swap the parent buffer with the new one
+        GapBuffer_destroy(*buff);
+        *buff = buff2;
+    }
+
+    return true;
+}
+#endif
