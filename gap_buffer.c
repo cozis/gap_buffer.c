@@ -144,7 +144,7 @@ PRIVATE bool isSymbolAuxiliaryByte(uint8_t byte)
     // +-----+----------+
     // | 80  | 10000000 |
     // +-----+----------+
-
+    
     return (byte & 0xC0) == 0x80;
 }
 

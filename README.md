@@ -121,10 +121,10 @@ You can instanciate a gap buffer in one of two ways:
 
 ```c
 GapBuffer *GapBuffer_create(size_t capacity);
-GapBuffer *GapBuffer_createUsingMemory(void *mem, size_t len);
+GapBuffer *GapBuffer_createUsingMemory(void *mem, size_t len, void (*free)(void*));
 ```
 
-The basic option is using `GapBuffer_create`, which instanciates a buffer with a given initial capacity allocating space through the libc allocator. If you fill the buffer up and insert more text, the buffer will grow by moving to a bigger memory region (also allocated through `malloc`). Conversely, `GapBuffer_createUsingMemory` doesn't use dynamic memory and does its job using only memory provided by the caller. Either way, if it wasn't possible to instanciate the gap buffer (either because the dynamic allocation failed or the provided memory isn't big enough), NULL is returned.
+The basic option is using `GapBuffer_create`, which instanciates a buffer with a given initial capacity allocating space through the libc allocator.  `GapBuffer_createUsingMemory` doesn't use dynamic memory and does its job using only memory provided by the caller. Either way, if it wasn't possible to instanciate the gap buffer (either because the dynamic allocation failed or the provided memory isn't big enough), NULL is returned.
 Once you're done with the buffer, you'll need to deallocate it using
 
 ```c
@@ -134,13 +134,17 @@ void GapBuffer_destroy(GapBuffer *buff);
 ### Text insertion
 To insert text, you must use the function
 ```c
-bool GapBuffer_insertString(GapBuffer **buff, const char *str, size_t len);
+bool GapBuffer_insertString(GapBuffer *buff, const char *str, size_t len);
 ```
 which expects a UTF-8 string `str` as input and inserts it into the buffer at the cursor's position (the `len` argument refers to the number of bytes of the string, not the number of characters). After insertion, the cursor is moved after the inserted text, just like a cursor of a text editor! 
 
-The validity of the string is checked before insertion to make sure the buffer only contains valid UTF-8. If the string is inserted then `true` is returned, else if the string is invalid UTF-8 or relocation fails, false is returned.
+The validity of the string is checked before insertion to make sure the buffer only contains valid UTF-8. If the string is inserted then `true` is returned, else if the string is invalid UTF-8 or there's no spare memory in the buffer, false is returned.
 
-An important thing to note is that the caller's handle of the buffer is passed by reference because the function may need to change the pointer if relocation occurres. 
+An alternative function is
+```c
+bool       GapBuffer_insertStringMaybeRelocate(GapBuffer **buff, const char *str, size_t len);
+```
+which behaves like the previous one but relocates the buffer if no more space is available in the old one. If relocation fails, false is returned.
 
 ### Cursor position
 To move the cursor position you can use the functions
