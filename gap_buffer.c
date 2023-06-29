@@ -29,6 +29,21 @@ PRIVATE size_t getByteCount(GapBuffer *buff)
     return buff->total - buff->gap_length;
 }
 
+/* Symbol: GapBuffer_createUsingMemory
+**
+**   Initialize a gap buffer object using the provided
+**   memory region.
+**
+** Arguments:
+**   - mem: Address of the memory region
+**
+**   - len: Length (in bytes) of the memory region
+**          referred by [mem]
+**
+**   - free: Function to be called on the [mem] pointer
+**           when the gap buffer object is destroyed.
+**
+*/
 GapBuffer *GapBuffer_createUsingMemory(void *mem, size_t len, void (*free)(void*))
 {
     if (mem == NULL || len < sizeof(GapBuffer)) {
@@ -112,6 +127,27 @@ PRIVATE bool insertBytesAfterCursor(GapBuffer *buff, String str)
     return true;
 }
 
+/* Symbol: GapBuffer_cloneUsingMemory
+**
+**   Clone a gap buffer object into the provided memory 
+**   region. The provided memory region size can be of
+**   a different size than the source object's. 
+**
+** Arguments:
+**   - mem: Address of the memory region.
+**
+**   - len: Length (in bytes) of the memory region
+**          referred by [mem].
+**
+**   - free: Function to be called on the [mem] pointer
+**           when the gap buffer object is destroyed.
+**
+**   - src: Gap buffer object to be cloned.
+**
+** Notes:
+**   - This makes it possible to grow a gap buffer object
+**     that has no free space left.
+*/
 GapBuffer *GapBuffer_cloneUsingMemory(void *mem, size_t len, 
                                       void (*free)(void*),
                                       const GapBuffer *src)
@@ -252,6 +288,24 @@ PRIVATE bool isValidUTF8(const char *str, size_t len)
     return true;
 }
 
+/* Symbol: GapBuffer_insertString
+**
+**   Insert a UTF8-encoded string into a gap buffer object.
+**
+** Arguments:
+**   - buff: Gap buffer object where the string will be
+**           inserted.
+**
+**   - str: Address to the UTF8-encoded string (doesn't need
+**          to be zero-terminated).
+**
+**   - len: Length of the sequence [str]
+**
+** Returns:
+**   [false] if there wasn't enough space in the buffer 
+**   or the provided string isn't valid UTF8. Returns
+**   [true] if all went well.
+*/
 bool GapBuffer_insertString(GapBuffer *buff, const char *str, size_t len)
 {
     if (!isValidUTF8(str, len))

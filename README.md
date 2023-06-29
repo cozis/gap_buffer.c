@@ -124,12 +124,18 @@ GapBuffer *GapBuffer_create(size_t capacity);
 GapBuffer *GapBuffer_createUsingMemory(void *mem, size_t len, void (*free)(void*));
 ```
 
-The basic option is using `GapBuffer_create`, which instanciates a buffer with a given initial capacity allocating space through the libc allocator.  `GapBuffer_createUsingMemory` doesn't use dynamic memory and does its job using only memory provided by the caller. Either way, if it wasn't possible to instanciate the gap buffer (either because the dynamic allocation failed or the provided memory isn't big enough), NULL is returned.
+The basic option is using `GapBuffer_create`, which instanciates a buffer with a given initial capacity allocating space through the libc allocator. `GapBuffer_createUsingMemory` doesn't use dynamic memory and does its job using only memory provided by the caller. Either way, if it wasn't possible to instanciate the gap buffer (either because the dynamic allocation failed or the provided memory isn't big enough), NULL is returned.
 Once you're done with the buffer, you'll need to deallocate it using
 
 ```c
 void GapBuffer_destroy(GapBuffer *buff);
 ```
+
+It's also possible to clone a gap buffer object using
+```c
+GapBuffer *GapBuffer_cloneUsingMemory(void *mem, size_t len, void (*free)(void*), const GapBuffer *src);
+```
+which behaves like `GapBuffer_createUsingMemory` but copies the contents of a pre-existing gap buffer into the newly created one. This can be used to resize a gap buffer object by moving it.
 
 ### Text insertion
 To insert text, you must use the function
@@ -142,9 +148,9 @@ The validity of the string is checked before insertion to make sure the buffer o
 
 An alternative function is
 ```c
-bool       GapBuffer_insertStringMaybeRelocate(GapBuffer **buff, const char *str, size_t len);
+bool GapBuffer_insertStringMaybeRelocate(GapBuffer **buff, const char *str, size_t len);
 ```
-which behaves like the previous one but relocates the buffer if no more space is available in the old one. If relocation fails, false is returned.
+which behaves like the previous one but relocates the buffer if no more space is available in the old one. If relocation fails, false is returned. If this function succedes, the pointer to the buffer object is changed. 
 
 ### Cursor position
 To move the cursor position you can use the functions
@@ -161,5 +167,3 @@ void GapBuffer_removeForwards(GapBuffer *buff, size_t num);
 void GapBuffer_removeBackwards(GapBuffer *buff, size_t num);
 ```
 Where `num` is the number of unicode characters to be removed. If less than `num` characters are available, then they are all removed.
-
-## Testing
